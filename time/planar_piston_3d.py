@@ -201,7 +201,7 @@ class WesterveltEquation:
 f0 = 1.0e6
 c0 = 1487.0
 rho = 998.0
-amp = 2e5  # amplitude
+amp = 1e6  # amplitude
 wx = 0.06
 wy = 0.06
 T = wx / c0 + 2.0 / f0
