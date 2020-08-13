@@ -7,3 +7,7 @@ To run FEniCS-X, we recommend using docker. The docker image can be obtained by 
 
 To start the docker image, a command such as this should work:<br>
 ```docker run -it --shm-size=512m -v "$PWD":/root/fenics dolfinx/dolfinx:latest```
+
+If running in complex mode, execute this command in the terminal before running
+scripts:<br>
+```source /usr/local/bin/dolfinx-complex-mode```

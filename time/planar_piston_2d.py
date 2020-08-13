@@ -206,7 +206,7 @@ T = wx / c0 + 2.0 / f0
 omega = 2 * np.pi * f0
 
 degree = 2   # discretisation degree
-nPerLam = 6  # no. elements per wavelength
+nPerLam = 4  # no. elements per wavelength
 CFL = 0.9    # CFL constant
 
 lam = 2 * np.pi * c0 / omega  # wavelength
