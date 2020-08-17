@@ -14,6 +14,9 @@
 # * use an explicit 4th-order Runge-Kutta time-stepping scheme
 # * employ mass lumping to diagonalise the mass matrix
 
+# NOTE: the length of time required to reach a steady state depends on the
+# domain size and the refractive index. Need to experiment.
+
 import numpy as np
 from mpi4py import MPI
 from petsc4py import PETSc
