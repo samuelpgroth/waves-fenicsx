@@ -281,7 +281,7 @@ if (MPI.COMM_WORLD.rank == 0):
     ax.add_artist(circle)
 
     plt.colorbar()
-    fig.savefig('p_squared.png')
+    fig.savefig('results/p_squared.png')
     plt.close()
 
 # Compare against analytical solution
@@ -307,7 +307,7 @@ if (MPI.COMM_WORLD.rank == 0):
     ax.add_artist(circle)
 
     plt.colorbar()
-    fig.savefig('p_difference.png')
+    fig.savefig('results/p_difference.png')
     plt.close()
 
 relative_error = np.linalg.norm(np.abs(u_exact)**2 - p_sq) / \
