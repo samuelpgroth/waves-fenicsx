@@ -101,12 +101,12 @@ class WesterveltEquation:
         #     file.write_function(delta)
 
         # Westervelt equation
-        self.L1 = - inner(grad(self.u), grad(p)) * dx \
-            - (delta / c**2) * inner(grad(self.v), grad(p)) * dx \
-            + (2 * beta / (rho * c**4)) * inner(self.v * self.v, p) * dx \
-            - (1 / c) * inner(self.v, p) * ds \
-            + inner(self.g, p) * ds(1) \
-            + (delta / c**2) * inner(self.g_deriv, p) * ds(1)
+        self.L1 = - inner(grad(self.u), grad(p)) * dx(degree=k) \
+            - (delta / c**2) * inner(grad(self.v), grad(p)) * dx(degree=k) \
+            + (2 * beta / (rho * c**4)) * inner(self.v * self.v, p) * dx(degree=k) \
+            - (1 / c) * inner(self.v, p) * ds(degree=k) \
+            + inner(self.g, p) * ds(1, degree=k) \
+            + (delta / c**2) * inner(self.g_deriv, p) * ds(1, degree=k)
 
         self.lumped = True
         # Vector to be re-used for assembly
@@ -118,7 +118,7 @@ class WesterveltEquation:
             # Westervelt equation
             a = (1 / c**2) * \
                 (1 - 2 * beta * self.u / (rho * c**2)) * p * dx(degree=k) \
-                + (delta / c**3) * p * ds
+                + (delta / c**3) * p * ds(degree=k)
 
             self.M = dolfinx.fem.assemble_vector(a)
             self.M.ghostUpdate(addv=PETSc.InsertMode.ADD,

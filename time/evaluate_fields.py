@@ -21,9 +21,10 @@ def evaluate(points, mesh, u):
     # Workaround since the cell exists on multiple processors, not respecting
     # ghosting.
     num_proc = MPI.COMM_WORLD.allgather(on_proc)
+    # from IPython import embed; embed()
 
     u_on_proc = u.eval(points.T, colliding_cells)
     u_g = MPI.COMM_WORLD.allgather(u_on_proc)
-    u_gathered = sum(u_g).T[0] / sum(num_proc)
+    u_gathered = sum(u_g).T[0] #/ sum(num_proc)
 
     return u_gathered
