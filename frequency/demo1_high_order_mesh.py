@@ -1,31 +1,35 @@
 #
-# Scattering of a plane wave by a penetrable circle
-# =================================================
+# Scattering of a plane wave by a sound-hard circle using high-order mesh
+# =======================================================================
 #
 # This demo illustrates how to:
 #
-# * Compute the scattering of a plane wave by a homogeneous dielectric obstable
+# * Compute the scattering of a plane wave by a sound-hard circle
+# * Use quadratic mesh elements to represent the circular boundary accurately
 # * Employ an "adiabatic layer" to truncate the domain
 # * Evaluate the FEM solution at specified grid points
-# * Make a nice plot of the solution in the domain
 # * Compare the approximation to the analytical solution
+# * Make a nice plot of the solution in the domain
 #
 # Adiabatic absorbers are presented in detail in
 # "The failure of perfectly matched layers, and towards their redemption
 #  by adiabatic absorbers" - Oskooi et al. (2008)
 
 import numpy as np
-import time
-import matplotlib
-import dolfinx
 from mpi4py import MPI
-from dolfinx import (Function, FunctionSpace, RectangleMesh,
-                     geometry, has_petsc_complex)
-from dolfinx.io import XDMFFile
-from dolfinx.cpp.mesh import CellType
-from ufl import (dx, grad, inner, TestFunction, TrialFunction)
-from petsc4py import PETSc
+import gmsh
 import matplotlib.pyplot as plt
+import matplotlib
+from gmsh_helpers import gmsh_model_to_mesh
+import time
+from petsc4py import PETSc
+from dolfinx import (Function, FunctionSpace, geometry, has_petsc_complex)
+from ufl import (dx, grad, inner, dot, TestFunction, TrialFunction,
+                 FacetNormal, Measure, lhs, rhs)
+from dolfinx.io import XDMFFile
+from analytical import sound_hard_circle
+from dolfinx.mesh import locate_entities_boundary
+import dolfinx
 
 # This implementation relies on the complex mode of dolfin-x, invoked by
 # executing the command:
@@ -38,9 +42,8 @@ if not has_petsc_complex:
 '''                        Problem parameters                               '''
 k0 = 10                  # wavenumber
 wave_len = 2*np.pi / k0  # wavelength
-radius = 4 * wave_len    # scatterer radius
-ref_ind = 1.2            # refractive index of scatterer
-dim_x = 20*wave_len      # width of computational domain
+radius = 1 * wave_len    # scatterer radius
+d_air = 4 * wave_len     # distance between scatterer and absorbing layer
 
 '''    Discretization parameters: polynomial degree and mesh resolution     '''
 degree = 3  # polynomial degree
@@ -65,16 +68,51 @@ sigma0 = -(deg_absorb + 1) * np.log(RT) / (2.0 * d_absorb)
 
 '''                             Meshing                                     '''
 # For this problem we use a square mesh with triangular elements.
-# The mesh element size is h_elem, and the #elements in one dimension is n_elem
-h_elem = wave_len / n_wave
-n_elem = np.int(np.round(dim_x/h_elem))
+# The domain width is 2 * (radius + d_air + d_absorb)
+dim_x = 2 * (radius + d_air + d_absorb)
 
-# Create mesh
-mesh = RectangleMesh(MPI.COMM_WORLD,
-                     [np.array([-dim_x/2, -dim_x/2, 0]),
-                      np.array([dim_x/2, dim_x/2, 0])],
-                     [n_elem, n_elem],
-                     CellType.triangle, dolfinx.cpp.mesh.GhostMode.none)
+# The mesh element size is h_elem
+h_elem = wave_len / n_wave
+
+# We create the mesh using the Gmsh Python API. For a tutorial, see
+# http://jsdokken.com/converted_files/tutorial_gmsh.html
+gmsh.initialize()
+gdim = 2  # dimension of the problem
+
+# The mesh is a square with a disk cut out
+rank = MPI.COMM_WORLD.rank
+if rank == 0:
+    rectangle = gmsh.model.occ.addRectangle(-dim_x/2, -dim_x/2, 0,
+                                            dim_x, dim_x, tag=1)
+    obstacle = gmsh.model.occ.addDisk(0, 0, 0, radius, radius)
+    fluid = gmsh.model.occ.cut([(gdim, rectangle)], [(gdim, obstacle)])
+    gmsh.model.occ.synchronize()
+
+fluid_marker = 1
+if rank == 0:
+    volumes = gmsh.model.getEntities(dim=gdim)
+    gmsh.model.addPhysicalGroup(volumes[0][0], [volumes[0][1]], fluid_marker)
+    gmsh.model.setPhysicalName(volumes[0][0], fluid_marker, "Fluid")
+
+gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h_elem)
+gmsh.model.occ.synchronize()
+gmsh.model.mesh.generate(3)
+gmsh.model.mesh.setOrder(2)  # Command required for quadratic elements
+
+# Use a gmsh helper function to create the mesh. This requires Jorgen's
+# file http://jsdokken.com/converted_files/gmsh_helpers.py
+mesh, cell_tags = gmsh_model_to_mesh(gmsh.model, cell_data=True, gdim=2)
+n = FacetNormal(mesh)
+
+
+def boundary(x):
+    return (x[0]**2 + x[1]**2) < (radius+1.0e-2)**2
+
+
+circle_facets = locate_entities_boundary(mesh, 1, boundary)
+mt = dolfinx.mesh.MeshTags(mesh, 1, circle_facets, 1)
+
+ds = Measure("ds", subdomain_data=mt)
 
 '''        Incident field, wavenumber and adiabatic absorber functions      '''
 
@@ -82,16 +120,6 @@ mesh = RectangleMesh(MPI.COMM_WORLD,
 def incident(x):
     # Plane wave travelling in positive x-direction
     return np.exp(1.0j * k0 * x[0])
-
-
-def wavenumber(x):
-    # Wavenumber function, k0 outside scatterer and (k0*ref_ind) inside.
-    # This function also defines the shape as a circle. Modify for different
-    # shapes.
-    r = np.sqrt((x[0])**2 + (x[1])**2)
-    inside = (r <= radius)
-    outside = (r > radius)
-    return inside * ref_ind * k0 + outside * k0
 
 
 def adiabatic_layer(x):
@@ -118,10 +146,6 @@ def adiabatic_layer(x):
 # Define function space
 V = FunctionSpace(mesh, ("Lagrange", degree))
 
-# Interpolate wavenumber k onto V
-k = Function(V)
-k.interpolate(wavenumber)
-
 # Interpolate absorbing layer piece of wavenumber k_absorb onto V
 k_absorb = Function(V)
 k_absorb.interpolate(adiabatic_layer)
@@ -134,11 +158,12 @@ ui.interpolate(incident)
 u = TrialFunction(V)
 v = TestFunction(V)
 
-a = inner(grad(u), grad(v)) * dx \
-    - k**2 * inner(u, v) * dx \
-    - k_absorb * inner(u, v) * dx
+F = inner(grad(u), grad(v)) * dx - k0**2 * inner(u, v) * dx - \
+    k_absorb * inner(u, v) * dx \
+    + inner(dot(grad(ui), n), v) * ds(1)
 
-L = inner((k**2 - k0**2) * ui, v) * dx
+a = lhs(F)
+L = rhs(F)
 
 '''           Assemble matrix and vector and set up direct solver           '''
 A = dolfinx.fem.assemble_matrix(a)
@@ -165,7 +190,7 @@ u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                      mode=PETSc.ScatterMode.FORWARD)
 
 # Write solution to file
-with XDMFFile(MPI.COMM_WORLD, "sol.xdmf", "w") as file:
+with XDMFFile(MPI.COMM_WORLD, "results/sol.xdmf", "w") as file:
     file.write_mesh(mesh)
     file.write_function(u)
 
@@ -184,21 +209,40 @@ points = np.vstack((plot_grid[0].ravel(),
                     plot_grid[1].ravel(),
                     np.zeros(plot_grid[0].size)))
 
+points_2d = points[:2, :]
+
+# Locate grid points inside the circle. These are outside the computation
+# domain so we will ultimately set the field here to zero.
+in_circ = points[0, :]**2 + points[1, :]**2 <= (radius)**2
+in_circ_2d = points_2d[0, :]**2 + points_2d[1, :]**2 <= (radius)**2
+points[0, in_circ] = -radius - wave_len / 10
+points[1, in_circ] = radius + wave_len / 10
+points[2, in_circ] = 0.
+
 # Bounding box tree etc for function evaluations
 tree = geometry.BoundingBoxTree(mesh, 2)
-points_2d = points[0:2, :]
 cell_candidates = [geometry.compute_collisions_point(tree, xi)
                    for xi in points.T]
 cells = [dolfinx.cpp.geometry.select_colliding_cells(mesh, cell_candidates[i],
          points.T[i], 1)[0] for i in range(len(cell_candidates))]
 
 # Evaluate scattered and incident fields at grid points
-u_sca = u.eval(points.T, cells).reshape((Nx, Ny))
+u_sca_temp = u.eval(points.T, cells)
+u_sca_temp[in_circ_2d] = 0.0            # Set field inside circle to zero
+u_sca = u_sca_temp.reshape((Nx, Ny))    # Reshape
 inc_field = incident(points_2d)
+inc_field[in_circ_2d] = 0.0             # Set field inside circle to zero
 u_inc = inc_field.reshape((Nx, Ny))
 
 # Sum to give total field
 u_total = u_inc + u_sca
+
+'''                  Compare against analytical solution                    '''
+# Uncomment to perform comparison, takes a few seconds to run
+u_exact = sound_hard_circle(k0, radius, plot_grid)
+diff = u_exact-u_total
+error = np.linalg.norm(diff)/np.linalg.norm(u_exact)
+print('Relative error = ', error)
 
 '''                     Plot field and save figure                          '''
 matplotlib.rcParams.update({'font.size': 22})
@@ -212,13 +256,4 @@ circle = plt.Circle((0., 0.), radius, color='black', fill=False)
 ax.add_artist(circle)
 plt.axis('off')
 plt.colorbar()
-fig.savefig('circle_scatter.png')
-
-'''                  Compare against analytical solution                    '''
-# Uncomment to perform comparison, takes a few seconds to run
-# from analytical import penetrable_circle
-# k1 = ref_ind * k0
-# u_exact = penetrable_circle(k0, k1, radius, plot_grid)
-
-# error = np.linalg.norm(u_exact-u_total)/np.linalg.norm(u_exact)
-# print('Relative error = ', error)
+fig.savefig('results/circle_scatter.png')
