@@ -97,7 +97,7 @@ def wavenumber(x):
 def adiabatic_layer(x):
     '''          Contribution to wavenumber k in absorbing layers          '''
     # In absorbing layer, have k = k0 + 1j * sigma
-    # => k^2 = (k0 + 1j*sigma)^2 = k0^2 + 2j*sigma - sigma^2
+    # => k^2 = (k0 + 1j*sigma)^2 = k0^2 + 2j*sigma*k0 - sigma^2
     # Therefore, the 2j*sigma - sigma^2 piece must be included in the layer.
 
     # Find borders of width d_absorb in x- and y-directions

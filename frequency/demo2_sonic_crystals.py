@@ -108,7 +108,7 @@ def wavenumber(x):
 def adiabatic_layer(x):
     '''          Contribution to wavenumber k in absorbing layers          '''
     # In absorbing layer, have k = k0 + 1j * sigma
-    # => k^2 = (k0 + 1j*sigma)^2 = k0^2 + 2j*sigma - sigma^2
+    # => k^2 = (k0 + 1j*sigma)^2 = k0^2 + 2j*sigma*k0 - sigma^2
     # Therefore, the 2j*sigma - sigma^2 piece must be included in the layer.
 
     # Find borders of width d_absorb in x- and y-directions
@@ -215,7 +215,7 @@ u_total = u_inc + u_sca
 '''                     Plot field and save figure                          '''
 matplotlib.rcParams.update({'font.size': 22})
 plt.rc('font', family='serif')
-fig = plt.figure(figsize=(10, 10))
+fig = plt.figure(figsize=(10, 5))
 ax = fig.gca()
 plt.imshow(np.fliplr(np.real(u_total)).T,
            extent=[-dim_in_x/2, dim_in_x/2, -dim_in_y/2, dim_in_y/2],
