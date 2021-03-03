@@ -5,8 +5,7 @@ from mpi4py import MPI
 
 from dolfinx import cpp
 from dolfinx.cpp.io import perm_gmsh
-from dolfinx.io import (XDMFFile, extract_gmsh_geometry,
-                        extract_gmsh_topology_and_markers, ufl_mesh_from_gmsh)
+from dolfinx.io import XDMFFile, extract_gmsh_geometry, ufl_mesh_from_gmsh
 from dolfinx.mesh import create_mesh
 
 # incident wavefield parameters
@@ -62,8 +61,8 @@ def circle_mesh(type="quad"):
     scatterer = model.occ.addDisk(0, 0, 0, rad_circ, rad_circ)
     domain = model.occ.addDisk(0, 0, 0, dim_x/2, dim_x/2)
     fragment = model.occ.fragment([(2, domain)], [(2, scatterer)])[0]
-    model.occ.synchronize()
 
+    model.occ.synchronize()
     model.mesh.generate(2)
 
     x = extract_gmsh_geometry(model, model.getCurrent())
