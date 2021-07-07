@@ -1,80 +1,100 @@
 import numpy as np
-import time
-import matplotlib
-import dolfinx
+import gmsh
+
 from mpi4py import MPI
-from dolfinx import (Function, FunctionSpace, RectangleMesh,
-                     geometry, NewtonSolver)
-from dolfinx.io import XDMFFile
-from dolfinx.fem import assemble_vector
-from dolfinx.cpp.mesh import CellType
-from ufl import (ds, dx, grad, inner, dot, derivative,
-                 FiniteElement, TestFunction, TrialFunction, lhs, rhs)
-from petsc4py import PETSc
 
-# import dolfinx.log
-# dolfinx.log.set_log_level(dolfinx.log.LogLevel.INFO)
+from dolfinx import cpp
+from dolfinx.cpp.io import perm_gmsh
+from dolfinx.io import XDMFFile, extract_gmsh_geometry, ufl_mesh_from_gmsh
+from dolfinx.mesh import create_mesh
 
-# Set parameters for simulation
-degree = 4              # degree of polynomials in approximation space
-time_step_method = 'CN'  # CN = Crank-Nicolson, RK = Runge-Kutta
-
-# Incident wavefield parameters
-omega = 2*np.pi*1e6           # angular frequency
+# incident wavefield parameters
+omega = 2 * np.pi * 1e6  # angular frequency
 delta0 = 16.0e2          # attenuation
 c0 = 1.48e3              # wavespeed
-p0 = 1.0             # initial pressure amplitude
+p0 = 1.0                 # initial pressure amplitude
 
-# Generate useful parameters
-f0 = omega / (2*np.pi)  # frequency
-lam = c0 / f0           # wavelength
-period = 1.0 / f0       # temporal period
-k0 = omega / c0         # wavenumber
+f0 = omega / c0          # frequency
+lam = c0 / f0            # wavelength
+period = 1.0 / f0        # temporal period
+k0 = omega / c0          # wavenumber
 
-t, T = 0, 16*period           # simulation start and end times
-CFL = 0.25               # CFL constant
+# computational domain and mesh parameters
+rad_circ = 2 * lam            # scatterer radius
+rad_dom = rad_circ + 4 * lam  # domain radius
+refInd = 1.2                  # scatterer refractive index
+dim_x = 2 * rad_dom           # domain diameter
+
+n_per_lam = 4                 # no. of element per wavelength
+h_elem = lam / n_per_lam      # element size
+n_elem_x = int(np.round(dim_x/h_elem)) # no. of element on x axis
 
 
-# dim_x = 14*lam            # width of computational domain
-n_per_lam = 4
-rad_circ = 2*lam
-rad_dom = rad_circ + 4 * lam
-refInd = 1.2
-dim_x = rad_dom * 2  # radius diameter
+def circle_mesh(type="quad"):
+    """
+    Generate a mesh for circular domain with a penetrable circular scatterer.
+    Mesh is written in XDMF file format.
 
-h_elem = lam / n_per_lam
-n_elem_x = np.int(np.round(dim_x/h_elem))
+    Parameters:
+        type : {'quad', 'tri'}
+            Type of mesh element
 
-dpml = 0*lam
+    Returns:
+        None
+    """
 
-# Direction of propagation of incident beam
-inc_ang = 0
-d_inc = [np.cos(inc_ang), np.sin(inc_ang)]
-d_inc = d_inc / np.linalg.norm(d_inc)
+    gmsh.initialize()
+    model = gmsh.model()
 
-# Generate mesh
-def circle_mesh():
-    import pygmsh, meshio
-    geom = pygmsh.built_in.Geometry()
-    disk_inner = geom.add_circle([0, 0, 0], rad_circ, h_elem/refInd)
-    disk = geom.add_circle([0, 0, 0], dim_x/2, h_elem,
-                         holes=[disk_inner.line_loop])
+    model.add("Circular domain")
+    model.setCurrent("Circular domain")
 
-    geom.add_raw_code("Recombine Surface {:};")
-    geom.add_raw_code("Mesh.RecombinationAlgorithm = 2;")
+    if type == "quad":
+        gmsh.option.setNumber("Mesh.RecombinationAlgorithm", 2)
+        gmsh.option.setNumber("Mesh.RecombineAll", 2)
 
-    mesh = pygmsh.generate_mesh(geom, dim=2, prune_z_0=True)
-    cells = np.vstack(np.array([cells.data for cells in mesh.cells
-                                if cells.type == "quad"]))
-    triangle_mesh = meshio.Mesh(points=mesh.points,
-                                cells=[("quad", cells)])
+    elif type == "tri":
+        pass
 
-    # Write mesh
-    meshio.xdmf.write("mesh.xdmf", triangle_mesh)
+    gmsh.option.setNumber("Mesh.CharacteristicLengthFactor", h_elem)
 
-circle_mesh()
+    scatterer = model.occ.addDisk(0, 0, 0, rad_circ, rad_circ)
+    domain = model.occ.addDisk(0, 0, 0, dim_x/2, dim_x/2)
+    fragment = model.occ.fragment([(2, domain)], [(2, scatterer)])[0]
 
-# Read mesh
-with XDMFFile(MPI.COMM_WORLD, "mesh.xdmf", "r",
-              XDMFFile.Encoding.HDF5) as xdmf:
-         mesh = xdmf.read_mesh(name="Grid")
+    model.occ.synchronize()
+    model.mesh.generate(2)
+
+    x = extract_gmsh_geometry(model, model.getCurrent())
+
+    element_types, element_tags, node_tags = model.mesh.getElements(dim=2)
+    name, dim, order, num_nodes, \
+        local_coords, num_first_order_nodes \
+        = model.mesh.getElementProperties(element_types[0])
+    cells = node_tags[0].reshape(-1, num_nodes)-1
+
+    domain = ufl_mesh_from_gmsh(element_types[0], 2)
+
+    if type == "quad":
+        gmsh_quad4 = perm_gmsh(cpp.mesh.CellType.quadrilateral, 4)
+        cells = cells[:, gmsh_quad4]
+    elif type == "tri":
+        pass
+
+    mesh = create_mesh(MPI.COMM_SELF, cells, x[:, :2], domain)
+    mesh.name = "Disk"
+
+    with XDMFFile(MPI.COMM_SELF, "disk.xdmf", "w") as file:
+        file.write_mesh(mesh)
+
+
+# generate mesh
+circle_mesh("quad")
+
+# read mesh
+with XDMFFile(MPI.COMM_WORLD, "disk.xdmf", "r") as file:
+    mesh = file.read_mesh(name="Disk")
+    tdim = mesh.topology.dim
+    fdim = tdim - 1
+    mesh.topology.create_connectivity(tdim, tdim)
+    mesh.topology.create_connectivity(tdim, fdim)
