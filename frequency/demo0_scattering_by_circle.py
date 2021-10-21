@@ -19,8 +19,7 @@ import time
 import matplotlib
 import dolfinx
 from mpi4py import MPI
-from dolfinx import (Function, FunctionSpace, RectangleMesh,
-                     geometry, has_petsc_complex)
+from dolfinx import Function, FunctionSpace, RectangleMesh, geometry
 from dolfinx.io import XDMFFile
 from dolfinx.cpp.mesh import CellType
 from ufl import (dx, grad, inner, TestFunction, TrialFunction)
@@ -30,7 +29,7 @@ import matplotlib.pyplot as plt
 # This implementation relies on the complex mode of dolfin-x, invoked by
 # executing the command:
 # source /usr/local/bin/dolfinx-complex-mode
-if not has_petsc_complex:
+if not np.issubdtype(PETSc.ScalarType, np.complexfloating):
     print('This demo only works with PETSc-complex')
     exit()
 
@@ -212,7 +211,7 @@ circle = plt.Circle((0., 0.), radius, color='black', fill=False)
 ax.add_artist(circle)
 plt.axis('off')
 plt.colorbar()
-fig.savefig('results/circle_scatter.png')
+fig.savefig('circle_scatter.png')
 
 '''                  Compare against analytical solution                    '''
 # Uncomment to perform comparison, takes a few seconds to run

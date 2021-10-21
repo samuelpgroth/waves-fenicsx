@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import time
 from petsc4py import PETSc
-from dolfinx import (Function, FunctionSpace, geometry, has_petsc_complex)
+from dolfinx import Function, FunctionSpace, geometry 
 from ufl import (dx, grad, inner, dot, FiniteElement, TestFunction,
                  TrialFunction, FacetNormal, Measure, lhs, rhs)
 from dolfinx import cpp
@@ -37,7 +37,7 @@ import dolfinx
 # This implementation relies on the complex mode of dolfin-x, invoked by
 # executing the command:
 # source /usr/local/bin/dolfinx-complex-mode
-if not has_petsc_complex:
+if not np.issubdtype(PETSc.ScalarType, np.complexfloating):
     print('This demo only works with PETSc-complex')
     exit()
 
@@ -223,7 +223,7 @@ u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                      mode=PETSc.ScatterMode.FORWARD)
 
 # Write solution to file
-with XDMFFile(MPI.COMM_WORLD, "results/sol.xdmf", "w") as file:
+with XDMFFile(MPI.COMM_WORLD, "sol.xdmf", "w") as file:
     file.write_mesh(mesh)
     file.write_function(u)
 
@@ -289,4 +289,4 @@ circle = plt.Circle((0., 0.), radius, color='black', fill=False)
 ax.add_artist(circle)
 plt.axis('off')
 plt.colorbar()
-fig.savefig('results/circle_scatter.png')
+fig.savefig('circle_scatter.png')
