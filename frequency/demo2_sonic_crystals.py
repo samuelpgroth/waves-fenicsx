@@ -13,23 +13,22 @@
 # "The failure of perfectly matched layers, and towards their redemption
 #  by adiabatic absorbers" - Oskooi et al. (2008)
 
-import numpy as np
 import time
-import matplotlib
-import dolfinx
-from mpi4py import MPI
-from dolfinx import (Function, FunctionSpace, RectangleMesh,
-                     geometry, has_petsc_complex)
-from dolfinx.io import XDMFFile
-from dolfinx.cpp.mesh import CellType
-from ufl import (dx, grad, inner, TestFunction, TrialFunction)
-from petsc4py import PETSc
+import numpy as np
 import matplotlib.pyplot as plt
+import dolfinx
+
+from dolfinx import Function, FunctionSpace, RectangleMesh, geometry
+from dolfinx.cpp.mesh import CellType
+from dolfinx.io import XDMFFile
+from ufl import (dx, grad, inner, TestFunction, TrialFunction)
+from mpi4py import MPI
+from petsc4py import PETSc
 
 # This implementation relies on the complex mode of dolfin-x, invoked by
 # executing the command:
 # source /usr/local/bin/dolfinx-complex-mode
-if not has_petsc_complex:
+if not np.issubdtype(PETSc.ScalarType, np.complexfloating):
     print('This demo only works with PETSc-complex')
     exit()
 
@@ -70,8 +69,8 @@ sigma0 = -(deg_absorb + 1) * np.log(RT) / (2.0 * d_absorb)
 # For this problem we use a square mesh with triangular elements.
 # The mesh element size is h_elem, and the #elements in one dimension is n_elem
 h_elem = wave_len / n_wave
-n_elem_x = np.int(np.round(dim_x/h_elem))
-n_elem_y = np.int(np.round(dim_y/h_elem))
+n_elem_x = int(np.round(dim_x/h_elem))
+n_elem_y = int(np.round(dim_y/h_elem))
 
 # Create mesh
 mesh = RectangleMesh(MPI.COMM_WORLD,
@@ -97,7 +96,7 @@ def wavenumber(x):
             x0 = x_start + i*(gap+2*rad_crys)
             y0 = y_start + j*(gap+2*rad_crys)
             r = np.sqrt((x[0]-x0)**2 + (x[1]-y0)**2)
-            if i==0 and j==0:
+            if i == 0 and j == 0:
                 inside = (r <= rad_crys)
             else:
                 inside += (r <= rad_crys)
@@ -182,8 +181,8 @@ with XDMFFile(MPI.COMM_WORLD, "sol.xdmf", "w") as file:
 
 '''            Evaluate field over a specified grid of points              '''
 # Square grid with 10 points per wavelength in each direction
-Nx = np.int(np.ceil(dim_x/wave_len * 10))
-Ny = np.int(np.ceil(dim_y/wave_len * 10))
+Nx = int(np.ceil(dim_x/wave_len * 10))
+Ny = int(np.ceil(dim_y/wave_len * 10))
 
 # Evaluation grid does not include absorbing layers
 dim_in_x = dim_x - 2 * d_absorb
@@ -213,8 +212,7 @@ u_inc = inc_field.reshape((Nx, Ny))
 u_total = u_inc + u_sca
 
 '''                     Plot field and save figure                          '''
-matplotlib.rcParams.update({'font.size': 22})
-plt.rc('font', family='serif')
+plt.rc('font', family='serif', size=22)
 fig = plt.figure(figsize=(10, 5))
 ax = fig.gca()
 plt.imshow(np.fliplr(np.real(u_total)).T,
