@@ -18,7 +18,7 @@ import time
 import matplotlib
 import dolfinx
 from mpi4py import MPI
-from dolfinx import Function, FunctionSpace, RectangleMesh, geometry 
+from dolfinx import Function, FunctionSpace, RectangleMesh, geometry
 from dolfinx.io import XDMFFile
 from dolfinx.cpp.mesh import CellType
 from ufl import (dx, grad, inner, TestFunction, TrialFunction)
@@ -96,7 +96,7 @@ def wavenumber(x):
             x0 = x_start + i*(gap+2*rad_crys)
             y0 = y_start + j*(gap+2*rad_crys)
             r = np.sqrt((x[0]-x0)**2 + (x[1]-y0)**2)
-            if i==0 and j==0:
+            if i == 0 and j == 0:
                 inside = (r <= rad_crys)
             else:
                 inside += (r <= rad_crys)

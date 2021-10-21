@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 import time
 from petsc4py import PETSc
-from dolfinx import Function, FunctionSpace, geometry 
+from dolfinx import Function, FunctionSpace, geometry
 from ufl import (dx, grad, inner, dot, FiniteElement, TestFunction,
                  TrialFunction, FacetNormal, Measure, lhs, rhs)
 from dolfinx import cpp
@@ -31,7 +31,6 @@ from dolfinx.io import (XDMFFile, extract_gmsh_geometry,
                         extract_gmsh_topology_and_markers, ufl_mesh_from_gmsh)
 from dolfinx.mesh import create_mesh, create_meshtags
 from analytical import sound_hard_circle
-from dolfinx.mesh import locate_entities_boundary
 import dolfinx
 
 # This implementation relies on the complex mode of dolfin-x, invoked by
