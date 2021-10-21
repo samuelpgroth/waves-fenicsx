@@ -70,8 +70,8 @@ sigma0 = -(deg_absorb + 1) * np.log(RT) / (2.0 * d_absorb)
 # For this problem we use a square mesh with triangular elements.
 # The mesh element size is h_elem, and the #elements in one dimension is n_elem
 h_elem = wave_len / n_wave
-n_elem_x = np.int(np.round(dim_x/h_elem))
-n_elem_y = np.int(np.round(dim_y/h_elem))
+n_elem_x = int(np.round(dim_x/h_elem))
+n_elem_y = int(np.round(dim_y/h_elem))
 
 # Create mesh
 mesh = RectangleMesh(MPI.COMM_WORLD,
@@ -182,8 +182,8 @@ with XDMFFile(MPI.COMM_WORLD, "sol.xdmf", "w") as file:
 
 '''            Evaluate field over a specified grid of points              '''
 # Square grid with 10 points per wavelength in each direction
-Nx = np.int(np.ceil(dim_x/wave_len * 10))
-Ny = np.int(np.ceil(dim_y/wave_len * 10))
+Nx = int(np.ceil(dim_x/wave_len * 10))
+Ny = int(np.ceil(dim_y/wave_len * 10))
 
 # Evaluation grid does not include absorbing layers
 dim_in_x = dim_x - 2 * d_absorb
@@ -231,4 +231,4 @@ for i in range(nx):
 
 plt.axis('off')
 plt.colorbar()
-fig.savefig('sonic_crystal.png')
+fig.savefig('results/sonic_crystal.png')

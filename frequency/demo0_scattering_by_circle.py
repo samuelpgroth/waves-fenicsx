@@ -67,7 +67,7 @@ sigma0 = -(deg_absorb + 1) * np.log(RT) / (2.0 * d_absorb)
 # For this problem we use a square mesh with triangular elements.
 # The mesh element size is h_elem, and the #elements in one dimension is n_elem
 h_elem = wave_len / n_wave
-n_elem = np.int(np.round(dim_x/h_elem))
+n_elem = int(np.round(dim_x/h_elem))
 
 # Create mesh
 mesh = RectangleMesh(MPI.COMM_WORLD,
@@ -171,7 +171,7 @@ with XDMFFile(MPI.COMM_WORLD, "sol.xdmf", "w") as file:
 
 '''            Evaluate field over a specified grid of points              '''
 # Square grid with 10 points per wavelength in each direction
-Nx = np.int(np.ceil(dim_x/wave_len * 10))
+Nx = int(np.ceil(dim_x/wave_len * 10))
 Ny = Nx
 
 # Grid does not include absorbing layers
@@ -212,7 +212,7 @@ circle = plt.Circle((0., 0.), radius, color='black', fill=False)
 ax.add_artist(circle)
 plt.axis('off')
 plt.colorbar()
-fig.savefig('circle_scatter.png')
+fig.savefig('results/circle_scatter.png')
 
 '''                  Compare against analytical solution                    '''
 # Uncomment to perform comparison, takes a few seconds to run

@@ -20,13 +20,16 @@ from mpi4py import MPI
 import gmsh
 import matplotlib.pyplot as plt
 import matplotlib
-from gmsh_helpers import gmsh_model_to_mesh
 import time
 from petsc4py import PETSc
 from dolfinx import (Function, FunctionSpace, geometry, has_petsc_complex)
-from ufl import (dx, grad, inner, dot, TestFunction, TrialFunction,
-                 FacetNormal, Measure, lhs, rhs)
-from dolfinx.io import XDMFFile
+from ufl import (dx, grad, inner, dot, FiniteElement, TestFunction,
+                 TrialFunction, FacetNormal, Measure, lhs, rhs)
+from dolfinx import cpp
+from dolfinx.cpp.io import extract_local_entities, perm_gmsh
+from dolfinx.io import (XDMFFile, extract_gmsh_geometry,
+                        extract_gmsh_topology_and_markers, ufl_mesh_from_gmsh)
+from dolfinx.mesh import create_mesh, create_meshtags
 from analytical import sound_hard_circle
 from dolfinx.mesh import locate_entities_boundary
 import dolfinx
@@ -88,30 +91,59 @@ if rank == 0:
     fluid = gmsh.model.occ.cut([(gdim, rectangle)], [(gdim, obstacle)])
     gmsh.model.occ.synchronize()
 
-fluid_marker = 1
-if rank == 0:
+    fluid_marker = 1
     volumes = gmsh.model.getEntities(dim=gdim)
     gmsh.model.addPhysicalGroup(volumes[0][0], [volumes[0][1]], fluid_marker)
     gmsh.model.setPhysicalName(volumes[0][0], fluid_marker, "Fluid")
 
-gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h_elem)
-gmsh.model.occ.synchronize()
-gmsh.model.mesh.generate(3)
-gmsh.model.mesh.setOrder(2)  # Command required for quadratic elements
+    obstacle_marker = 1
+    surfaces = gmsh.model.getEntities(dim=gdim-1)
+    gmsh.model.addPhysicalGroup(surfaces[0][0], [surfaces[0][1]],
+                                obstacle_marker)
+    gmsh.model.setPhysicalName(surfaces[0][0], obstacle_marker, "Obstacle")
 
-# Use a gmsh helper function to create the mesh. This requires Jorgen's
-# file http://jsdokken.com/converted_files/gmsh_helpers.py
-mesh, cell_tags = gmsh_model_to_mesh(gmsh.model, cell_data=True, gdim=2)
+    gmsh.model.mesh.setSize(gmsh.model.getEntities(0), h_elem)
+    gmsh.model.occ.synchronize()
+    gmsh.model.mesh.generate(3)
+    gmsh.model.mesh.setOrder(2)  # Command required for quadratic elements
+
+    # Create dolfinx mesh on process 0
+    x = extract_gmsh_geometry(gmsh.model)
+    gmsh_cell_id = MPI.COMM_WORLD.bcast(
+        gmsh.model.mesh.getElementType("triangle", 2), root=0)
+    topologies = extract_gmsh_topology_and_markers(gmsh.model)
+    cells = topologies[gmsh_cell_id]["topology"]
+    cell_data = topologies[gmsh_cell_id]["cell_data"]
+    num_nodes = MPI.COMM_WORLD.bcast(cells.shape[1], root=0)
+    gmsh_facet_id = gmsh.model.mesh.getElementType("line", 2)
+    marked_facets = topologies[gmsh_facet_id]["topology"].astype(np.int64)
+    facet_values = topologies[gmsh_facet_id]["cell_data"].astype(np.int32)
+else:
+    # Create dolfinx mesh on other processes
+    gmsh_cell_id = MPI.COMM_WORLD.bcast(None, root=0)
+    num_nodes = MPI.COMM_WORLD.bcast(None, root=0)
+    cells, x = np.empty([0, num_nodes]), np.empty([0, 3])
+    marked_facets = np.empty((0, 3), dtype=np.int64)
+    facet_values = np.empty((0,), dtype=np.int32)
+
+# Permute the topology from GMSH to DOLFINx ordering
+domain = ufl_mesh_from_gmsh(gmsh_cell_id, 2)
+gmsh_tri6 = perm_gmsh(cpp.mesh.CellType.triangle, cells.shape[1])
+cells = cells[:, gmsh_tri6]
+mesh = create_mesh(MPI.COMM_WORLD, cells, x[:, :2], domain)
+
+# Permute also entities which are tagged
+gmsh_line3 = perm_gmsh(cpp.mesh.CellType.interval, 3)
+marked_facets = marked_facets[:, gmsh_line3]
+
+local_entities, local_values = extract_local_entities(
+    mesh, 1, marked_facets, facet_values)
+mesh.topology.create_connectivity(1, 0)
+mt = create_meshtags(mesh, 1,
+                     cpp.graph.AdjacencyList_int32(local_entities),
+                     np.int32(local_values))
+
 n = FacetNormal(mesh)
-
-
-def boundary(x):
-    return (x[0]**2 + x[1]**2) < (radius+1.0e-2)**2
-
-
-circle_facets = locate_entities_boundary(mesh, 1, boundary)
-mt = dolfinx.mesh.MeshTags(mesh, 1, circle_facets, 1)
-
 ds = Measure("ds", subdomain_data=mt)
 
 '''        Incident field, wavenumber and adiabatic absorber functions      '''
@@ -144,7 +176,8 @@ def adiabatic_layer(x):
 
 
 # Define function space
-V = FunctionSpace(mesh, ("Lagrange", degree))
+FE = FiniteElement("Lagrange", mesh.ufl_cell(), degree)
+V = FunctionSpace(mesh, FE)
 
 # Interpolate absorbing layer piece of wavenumber k_absorb onto V
 k_absorb = Function(V)
@@ -196,7 +229,7 @@ with XDMFFile(MPI.COMM_WORLD, "results/sol.xdmf", "w") as file:
 
 '''            Evaluate field over a specified grid of points              '''
 # Square grid with 10 points per wavelength in each direction
-Nx = np.int(np.ceil(dim_x/wave_len * 10))
+Nx = int(np.ceil(dim_x/wave_len * 10))
 Ny = Nx
 
 # Grid does not include absorbing layers
