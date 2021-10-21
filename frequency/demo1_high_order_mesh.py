@@ -15,23 +15,23 @@
 # "The failure of perfectly matched layers, and towards their redemption
 #  by adiabatic absorbers" - Oskooi et al. (2008)
 
-import numpy as np
-from mpi4py import MPI
-import gmsh
-import matplotlib.pyplot as plt
-import matplotlib
 import time
-from petsc4py import PETSc
-from dolfinx import Function, FunctionSpace, geometry
-from ufl import (dx, grad, inner, dot, FiniteElement, TestFunction,
-                 TrialFunction, FacetNormal, Measure, lhs, rhs)
-from dolfinx import cpp
+import numpy as np
+import matplotlib.pyplot as plt
+import gmsh
+import dolfinx
+
+from dolfinx import Function, FunctionSpace, cpp, geometry
 from dolfinx.cpp.io import extract_local_entities, perm_gmsh
 from dolfinx.io import (XDMFFile, extract_gmsh_geometry,
                         extract_gmsh_topology_and_markers, ufl_mesh_from_gmsh)
 from dolfinx.mesh import create_mesh, create_meshtags
+from ufl import (dx, grad, inner, dot, FiniteElement, TestFunction,
+                 TrialFunction, FacetNormal, Measure, lhs, rhs)
+from mpi4py import MPI
+from petsc4py import PETSc
+
 from analytical import sound_hard_circle
-import dolfinx
 
 # This implementation relies on the complex mode of dolfin-x, invoked by
 # executing the command:
@@ -277,8 +277,7 @@ error = np.linalg.norm(diff)/np.linalg.norm(u_exact)
 print('Relative error = ', error)
 
 '''                     Plot field and save figure                          '''
-matplotlib.rcParams.update({'font.size': 22})
-plt.rc('font', family='serif')
+plt.rc('font', family='serif', size=22)
 fig = plt.figure(figsize=(10, 10))
 ax = fig.gca()
 plt.imshow(np.fliplr(np.real(u_total)).T,

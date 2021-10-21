@@ -14,17 +14,19 @@
 # "The failure of perfectly matched layers, and towards their redemption
 #  by adiabatic absorbers" - Oskooi et al. (2008)
 
-import numpy as np
 import time
-import matplotlib
+import numpy as np
+import matplotlib.pyplot as plt
 import dolfinx
-from mpi4py import MPI
+
 from dolfinx import Function, FunctionSpace, RectangleMesh, geometry
 from dolfinx.io import XDMFFile
 from dolfinx.cpp.mesh import CellType
 from ufl import (dx, grad, inner, TestFunction, TrialFunction)
+from mpi4py import MPI
 from petsc4py import PETSc
-import matplotlib.pyplot as plt
+
+from analytical import penetrable_circle
 
 # This implementation relies on the complex mode of dolfin-x, invoked by
 # executing the command:
@@ -200,8 +202,7 @@ u_inc = inc_field.reshape((Nx, Ny))
 u_total = u_inc + u_sca
 
 '''                     Plot field and save figure                          '''
-matplotlib.rcParams.update({'font.size': 22})
-plt.rc('font', family='serif')
+plt.rc('font', family='serif', size=22)
 fig = plt.figure(figsize=(10, 10))
 ax = fig.gca()
 plt.imshow(np.fliplr(np.real(u_total)).T,
@@ -215,9 +216,8 @@ fig.savefig('circle_scatter.png')
 
 '''                  Compare against analytical solution                    '''
 # Uncomment to perform comparison, takes a few seconds to run
-# from analytical import penetrable_circle
-# k1 = ref_ind * k0
-# u_exact = penetrable_circle(k0, k1, radius, plot_grid)
+k1 = ref_ind * k0
+u_exact = penetrable_circle(k0, k1, radius, plot_grid)
 
-# error = np.linalg.norm(u_exact-u_total)/np.linalg.norm(u_exact)
-# print('Relative error = ', error)
+error = np.linalg.norm(u_exact-u_total)/np.linalg.norm(u_exact)
+print('Relative error = ', error)
